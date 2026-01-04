@@ -16,6 +16,14 @@
     "start": "node dist/index.js",
     "prepublishOnly": "bun run build"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hiutaky/d1-prisma.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Hiutaky/d1-prisma/issues"
+  },
+  "homepage": "https://github.com/Hiutaky/d1-prisma#readme",
   "dependencies": {
     "@clack/prompts": "^0.11.0",
     "bun": "^1.3.5",
