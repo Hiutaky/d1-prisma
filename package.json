@@ -1,6 +1,6 @@
 {
   "name": "d1-prisma",
-  "version": "0.2.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Bridge CLI to manage Cloudflare D1 migrations with Prisma",
   "main": "./dist/index.js",
