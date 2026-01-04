@@ -60,7 +60,7 @@ async function handleCreate(db: string) {
     // 3. Generate diff between current DB and desired state (backup)
     s.message("Generating SQL diff...");
     await asyncExec(
-      `prisma migrate diff --from-schema-datamodel ${schemaPath} --to-schema-datamodel ${tempSchema} --script >> ${migrationPath}`
+      `prisma migrate diff --from-schema ${schemaPath} --to-schema ${tempSchema} --script >> ${migrationPath}`
     );
 
     s.stop(`Migration created: ${path.basename(migrationPath)}`);
