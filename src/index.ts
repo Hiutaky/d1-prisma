@@ -41,6 +41,7 @@ async function handleCreate(db: string) {
   if (isCancel(name)) return;
 
   const schemaPath = args.schema || "./prisma/schema.prisma";
+
   const tempSchema = `${schemaPath}.backup.${Date.now()}`;
   const s = spinner();
 
@@ -50,20 +51,23 @@ async function handleCreate(db: string) {
 
     s.start("Creating migration file...");
     const result = await asyncExec(`wrangler d1 migrations create ${db} ${name}`);
-    const migrationPath = result.trim().split("\n").find((l) => l.endsWith(".sql"));
-    if (!migrationPath) throw new Error("Migration path not found");
+    const migrationFile = result.trim().split("\n").find((l) => l.endsWith(".sql"));
+    const _migrationPath = migrationFile?.split('/')
+    const migrationPath = _migrationPath?.slice(0, _migrationPath.length - 2).join('/');
+
+    if (!migrationFile) throw new Error("Migration path not found");
 
     // 2. Synchronize schema with current DB
     s.message("Synchronizing Prisma schema with DB...");
-    await asyncExec(`prisma db pull --schema ${schemaPath}`);
+    // await asyncExec(`prisma db pull --schema ${schemaPath}`);
 
     // 3. Generate diff between current DB and desired state (backup)
     s.message("Generating SQL diff...");
     await asyncExec(
-      `prisma migrate diff --from-schema ${schemaPath} --to-schema ${tempSchema} --script >> ${migrationPath}`
+      `prisma migrate diff --from-config-datasource --to-schema ${tempSchema} --script >> ${migrationFile}`
     );
 
-    s.stop(`Migration created: ${path.basename(migrationPath)}`);
+    s.stop(`Migration created: ${path.basename(migrationFile)}`);
   } catch (e) {
     log.error(`Error: ${e}`);
   } finally {
