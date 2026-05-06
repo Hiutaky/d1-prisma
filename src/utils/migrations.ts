@@ -12,7 +12,9 @@ export async function getNextVersion(migrationsDir: string): Promise<string> {
   return String(nextNum).padStart(4, "0");
 }
 
-export async function getAppliedMigrations(stateFile: string): Promise<MigrationState> {
+export async function getAppliedMigrations(
+  stateFile: string
+): Promise<MigrationState> {
   try {
     const content = await fs.readFile(stateFile, "utf-8");
     return JSON.parse(content) as MigrationState;
@@ -35,7 +37,9 @@ export async function markMigrationApplied(
   await fs.writeFile(stateFile, JSON.stringify(state, null, 2));
 }
 
-export async function isInitialMigration(migrationsDir: string): Promise<boolean> {
+export async function isInitialMigration(
+  migrationsDir: string
+): Promise<boolean> {
   const files = await listMigrationFiles(migrationsDir);
   return files.length === 0;
 }
@@ -43,12 +47,11 @@ export async function isInitialMigration(migrationsDir: string): Promise<boolean
 export async function getMigrationsDirFromConfig(
   prismaConfigPath: string
 ): Promise<string> {
-  const defaultPath = "prisma/migrations"
+  const defaultPath = "prisma/migrations";
   try {
     const content = await fs.readFile(prismaConfigPath, "utf-8");
     const match = content.match(/path:\s*["']([^"']+)["']/);
-    if (match) 
-      return match[1] ?? defaultPath;
+    if (match) return match[1] ?? defaultPath;
   } catch (e) {
     throw new Error(
       `Failed to read prisma.config.ts: ${e instanceof Error ? e.message : String(e)}`
@@ -66,7 +69,9 @@ export async function getPendingMigrations(
   return files.filter((f) => !state.applied.includes(f.replace(".sql", "")));
 }
 
-export async function getMigrationFiles(migrationsDir: string): Promise<string[]> {
+export async function getMigrationFiles(
+  migrationsDir: string
+): Promise<string[]> {
   return listMigrationFiles(migrationsDir);
 }
 
@@ -81,7 +86,9 @@ async function listMigrationFiles(migrationsDir: string): Promise<string[]> {
   }
 }
 
-export async function ensureMigrationsDir(migrationsDir: string): Promise<void> {
+export async function ensureMigrationsDir(
+  migrationsDir: string
+): Promise<void> {
   try {
     await fs.mkdir(migrationsDir, { recursive: true });
   } catch {

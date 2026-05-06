@@ -24,10 +24,9 @@
     // Some stricter flags (disabled by default)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
+    "noPropertyAccessFromIndexSignature": false,
+    "types": ["node", "bun"]
   },
-  "include": [
-    "src/**.ts"
-  ],
+  "include": ["src/**.ts"],
   "exclude": ["node_modules", "dist"]
 }

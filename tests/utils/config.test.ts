@@ -41,10 +41,7 @@ describe("findWranglerConfig", () => {
   });
 
   test("finds wrangler.toml", async () => {
-    await fs.writeFile(
-      path.join(tempDir, "wrangler.toml"),
-      'name = "test"'
-    );
+    await fs.writeFile(path.join(tempDir, "wrangler.toml"), 'name = "test"');
     const result = await findWranglerConfig();
     expect(result).toBe("wrangler.toml");
   });

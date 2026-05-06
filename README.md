@@ -70,9 +70,9 @@ Ensure you have a `wrangler.jsonc` or `wrangler.toml` file with your D1 database
     {
       "binding": "DB",
       "database_name": "my-database",
-      "database_id": "<unique-ID-for-your-database>"
-    }
-  ]
+      "database_id": "<unique-ID-for-your-database>",
+    },
+  ],
 }
 ```
 
@@ -84,6 +84,7 @@ Create a `prisma.config.ts` file in your project root:
 // prisma.config.ts
 import "dotenv/config";
 import { defineConfig, env } from "prisma/config";
+import { listLocalDatabases } from "@prisma/adapter-d1";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
@@ -91,7 +92,7 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: env("DATABASE_URL"), // "file:./prisma/db.sqlite"
+    url: `file:${listLocalDatabases().pop()}`, // resolve d1 .sqlite files in ./.wrangler/state/..."
   },
 });
 ```
@@ -117,13 +118,6 @@ model User {
 }
 ```
 
-### 3. Set up environment variables
-
-```
-# .env
-DATABASE_URL="file:./prisma/db.sqlite"
-```
-
 ## Usage
 
 ### Creating Migrations
@@ -135,13 +129,14 @@ d1-prisma create --name "add-users-table"
 ```
 
 The CLI will:
+
 1. Validate your Prisma schema
 2. Read the migrations directory from `prisma.config.ts`
 3. Determine if this is an initial migration or a schema change
 4. Generate the SQL diff using `prisma migrate diff`
 5. Write the migration file
 
-For subsequent migrations, the tool uses `--from-local-d1` to compare against your local D1 database state. If you have pending migrations not yet applied locally, you'll be warned to apply them first.
+For subsequent migrations, the tool uses `--from-config-datasource` to compare against your local D1 database state. If you have pending migrations not yet applied locally, you'll be warned to apply them first.
 
 ### Applying Migrations
 
@@ -189,38 +184,151 @@ d1-prisma create --name "add-users-table" --dry-run
 
 ### Global Options
 
-| Option | Description |
-|--------|-------------|
-| `-d, --database <name>` | D1 database name (required in non-interactive mode) |
-| `--wrangler-config <path>` | Custom wrangler config path |
-| `--non-interactive` | Skip prompts (CI/CD mode) |
+| Option                     | Description                         |
+| -------------------------- | ----------------------------------- |
+| `-d, --database <name>`    | D1 database name (overrides config) |
+| `--wrangler-config <path>` | Custom wrangler config path         |
+| `--non-interactive`        | Skip prompts (CI/CD mode)           |
+| `--log <level>`            | Log level (`info`, `debug`)         |
 
 ### Create Command
 
-| Option | Description |
-|--------|-------------|
-| `--name, -n <name>` | Migration name (required in non-interactive mode) |
-| `--schema <path>` | Custom Prisma schema path (default: `./prisma/schema.prisma`) |
-| `--migrations-dir <path>` | Custom migrations directory (overrides `prisma.config.ts`) |
-| `--baseline` | Mark migration as applied in local state |
-| `--dry-run` | Preview SQL without writing |
-| `--verbose` | Show detailed output |
+| Option                    | Description                                                   |
+| ------------------------- | ------------------------------------------------------------- |
+| `--name, -n <name>`       | Migration name (required in non-interactive mode)             |
+| `--schema <path>`         | Custom Prisma schema path (default: `./prisma/schema.prisma`) |
+| `--migrations-dir <path>` | Custom migrations directory (overrides `prisma.config.ts`)    |
+| `--baseline`              | Mark migration as applied in local state                      |
+| `--dry-run`               | Preview SQL without writing                                   |
+| `--verbose`               | Show detailed output                                          |
 
 ### Apply Command
 
-| Option | Description |
-|--------|-------------|
-| `--local` | Apply to local D1 (default) |
-| `--remote` | Apply to remote D1 |
+| Option     | Description                 |
+| ---------- | --------------------------- |
+| `--local`  | Apply to local D1 (default) |
+| `--remote` | Apply to remote D1          |
 
 ## Configuration
 
 The tool automatically detects your configuration files:
 
+- `d1-prisma.config.json` for tool-specific settings (recommended)
 - `wrangler.jsonc`, `wrangler.json`, or `wrangler.toml` for D1 database configuration
 - `prisma.config.ts` for migrations directory path
 
-If multiple D1 databases are configured, you'll be prompted to select one.
+### d1-prisma.config.json
+
+You can create a `d1-prisma.config.json` file in your project root to avoid passing flags manually.
+
+```json
+{
+  "$schema": "./node_modules/d1-prisma/schema.json",
+  "database": "my-database-name",
+  "wranglerConfig": "wrangler.toml",
+  "wranglerDataDir": ".wrangler/state",
+  "migrationsDir": "./prisma/migrations",
+  "schema": "./prisma/schema.prisma"
+}
+```
+
+## Monorepo Usage
+
+When using `d1-prisma` in a monorepo (e.g., Turborepo, Nx), the local D1 state might be located in a different directory than the package root.
+
+To ensure `d1-prisma` finds your local D1 database, you should define `wranglerDataDir` in your `d1-prisma.config.json`. This value is also passed to Wrangler commands via the `--persist-to` flag.
+
+### Example Monorepo Structure
+
+```text
+my-monorepo/
+├── wrangler.toml        # Global wrangler config
+├── packages/
+│   └── database/
+│       ├── prisma/
+│       ├── d1-prisma.config.json
+│       └── package.json
+└── .wrangler/           # Local D1 state is here
+```
+
+In `packages/database/d1-prisma.config.json`:
+
+```json
+{
+  "wranglerConfig": "../../wrangler.json",
+  "wranglerDataDir": "../../.wrangler/state"
+}
+```
+
+This configuration tells `d1-prisma` to:
+
+1. Look for the D1 database definitions in the root `wrangler.json`.
+2. Look for the local SQLite files and apply migrations using the state located in the root `.wrangler` directory.
+
+### Recommended `prisma.config.ts` for Monorepos
+
+To ensure Prisma 7 correctly connects to the local D1 database managed by Wrangler in a monorepo, we recommend using a dynamic `datasource.url` in your `prisma.config.ts`:
+
+```typescript
+// packages/database/prisma.config.ts
+import path from "node:path";
+import fs from "node:fs";
+import "dotenv/config";
+import { defineConfig } from "prisma/config";
+
+const localD1DatabasePath = path.join(
+  "..",
+  "..",
+  ".wrangler",
+  "state",
+  "v3",
+  "d1",
+  "miniflare-D1DatabaseObject"
+);
+
+function listCustomLocalDatabases() {
+  const cwd = process.cwd();
+  const d1DirPath = path.join(cwd, localD1DatabasePath);
+  try {
+    const files = fs.readdirSync(d1DirPath);
+    return files
+      .filter((file) => file.endsWith(".sqlite"))
+      .map((file) => path.join(d1DirPath, file));
+  } catch {
+    return [];
+  }
+}
+
+export function getLocalDb() {
+  const db = listCustomLocalDatabases()
+    .filter((v) => !v.includes("metadata"))
+    .pop();
+  return db ? `file:${db}` : process.env.DATABASE_URL;
+}
+
+export default defineConfig({
+  schema: "prisma/schema.prisma",
+  migrations: {
+    path: "prisma/migrations",
+  },
+  datasource: {
+    url: getLocalDb(),
+  },
+});
+```
+
+## Debugging
+
+If the library is not behaving as expected, you can use the `--log debug` flag to see detailed information about:
+
+- Resolved configuration paths
+- Environment variables
+- Commands being executed
+- Local database discovery process
+
+```bash
+d1-prisma status --log debug
+```
 
 ## CI/CD Usage
 

@@ -5,12 +5,12 @@
     {
       "binding": "DB",
       "database_name": "test-db",
-      "database_id": "test-db-id-123"
+      "database_id": "test-db-id-123",
     },
     {
       "binding": "DB2",
       "database_name": "test-db-2",
-      "database_id": "test-db-id-456"
-    }
-  ]
+      "database_id": "test-db-id-456",
+    },
+  ],
 }

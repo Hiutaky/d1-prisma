@@ -26,8 +26,7 @@ export const asyncExec = (
     const { timeout, cwd, env } = options || {};
     const fullCommand = `${getRunner()} ${command}`;
     const execEnv = env ? { ...process.env, ...env } : process.env;
-
-    const child = exec(
+    exec(
       fullCommand,
       { timeout, cwd, env: execEnv },
       (error, stdout, stderr) => {
@@ -47,5 +46,4 @@ export const asyncExec = (
 export const asyncExecSimple = (
   command: string,
   options?: ExecOptions
-): Promise<string> =>
-  asyncExec(command, options).then((r) => r.stdout);
+): Promise<string> => asyncExec(command, options).then((r) => r.stdout);

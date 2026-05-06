@@ -17,6 +17,67 @@ export interface WranglerConfig {
   }>;
 }
 
+export interface D1PrismaConfig {
+  $schema?: string;
+  wranglerConfig?: string;
+  database?: string;
+  schema?: string;
+  migrationsDir?: string;
+  wranglerDataDir?: string;
+}
+
+let cachedConfig: D1PrismaConfig | null = null;
+
+export async function findD1PrismaConfig(): Promise<string | null> {
+  const candidates = ["d1-prisma.config.json"];
+  for (const candidate of candidates) {
+    if (await fileExists(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+export async function loadD1PrismaConfig(): Promise<D1PrismaConfig | null> {
+  const configPath = await findD1PrismaConfig();
+  if (!configPath) {
+    return null;
+  }
+
+  try {
+    const content = await fs.readFile(configPath, "utf-8");
+    return JSON.parse(content) as D1PrismaConfig;
+  } catch {
+    return null;
+  }
+}
+
+export async function getD1PrismaConfig(): Promise<D1PrismaConfig> {
+  if (cachedConfig === null) {
+    cachedConfig = (await loadD1PrismaConfig()) || {};
+  }
+  return cachedConfig;
+}
+
+export function resolveConfigValue<T>(
+  cliValue: T | undefined,
+  envKey: string,
+  configValue: T | undefined,
+  defaultValue: T
+): T {
+  if (cliValue !== undefined) {
+    return cliValue;
+  }
+  const envValue = process.env[envKey];
+  if (envValue !== undefined) {
+    return envValue as T;
+  }
+  if (configValue !== undefined) {
+    return configValue;
+  }
+  return defaultValue;
+}
+
 export async function getD1Databases(
   customConfigPath?: string
 ): Promise<D1Database[]> {

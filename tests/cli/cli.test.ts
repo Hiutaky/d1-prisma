@@ -72,10 +72,7 @@ describe("CLI", () => {
 
   test("create --non-interactive without --database exits 1", async () => {
     await setupWranglerConfig(tempDir);
-    const { exitCode } = await runCli(
-      ["create", "--non-interactive"],
-      tempDir
-    );
+    const { exitCode } = await runCli(["create", "--non-interactive"], tempDir);
     expect(exitCode).toBe(1);
   });
 

@@ -1,5 +1,9 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { getRunner, asyncExec, asyncExecSimple } from "../../src/utils/shell.js";
+import {
+  getRunner,
+  asyncExec,
+  asyncExecSimple,
+} from "../../src/utils/shell.js";
 
 describe("getRunner", () => {
   const originalUserAgent = process.env.npm_config_user_agent;
@@ -56,9 +60,9 @@ describe("asyncExecSimple", () => {
 
 describe("asyncExec", () => {
   test("rejects on invalid command", async () => {
-    await expect(asyncExec("nonexistentcommandthatdoesnotexist_xyz")).rejects.toThrow(
-      "Command failed:"
-    );
+    await expect(
+      asyncExec("nonexistentcommandthatdoesnotexist_xyz")
+    ).rejects.toThrow("Command failed:");
   });
 
   test("rejects when command fails", async () => {

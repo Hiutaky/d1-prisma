@@ -13,11 +13,15 @@ import {
 } from "@clack/prompts";
 import parseArgv from "tiny-parse-argv";
 import { asyncExecSimple } from "./utils/shell.js";
-import { getD1Databases, getPrismaConfigPath } from "./utils/config.js";
-import { findLocalD1DatabaseByName } from "./utils/d1.js";
+import {
+  getD1Databases,
+  getPrismaConfigPath,
+  getD1PrismaConfig,
+  resolveConfigValue,
+  findD1PrismaConfig,
+} from "./utils/config.js";
 import {
   getNextVersion,
-  getAppliedMigrations,
   markMigrationApplied,
   isInitialMigration,
   getMigrationsDirFromConfig,
@@ -33,9 +37,64 @@ const command = args._[0];
 async function main() {
   intro("D1 Prisma Migrate CLI");
 
-  const wranglerConfig =
-    args["wrangler-config"] || args.wranglerConfig || undefined;
+  const config = await getD1PrismaConfig();
+  const configPath = await findD1PrismaConfig();
+  const logLevel = args.log || "info";
+  const isDebug = logLevel === "debug";
+
+  if (isDebug) {
+    log.info(`Debug mode enabled. Arguments: ${JSON.stringify(args)}`);
+    log.info(
+      `Environment: ${JSON.stringify(
+        {
+          D1_PRISMA_WRANGLER_CONFIG: process.env.D1_PRISMA_WRANGLER_CONFIG,
+          D1_PRISMA_WRANGLER_DATA_DIR: process.env.D1_PRISMA_WRANGLER_DATA_DIR,
+          DATABASE_URL: process.env.DATABASE_URL ? "[REDACTED]" : undefined,
+        },
+        null,
+        2
+      )}`
+    );
+
+    if (configPath) {
+      log.info(`Using config from ${configPath}`);
+      if (Object.keys(config).length > 0) {
+        const configEntries = Object.entries(config)
+          .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+          .join(", ");
+        log.step(`Config parameters: ${configEntries}`);
+      } else {
+        log.warn(
+          "Config file found but it seems to be empty or not exported correctly."
+        );
+      }
+    }
+  }
+
+  const wranglerConfig = resolveConfigValue(
+    args["wrangler-config"] || args.wranglerConfig || undefined,
+    "D1_PRISMA_WRANGLER_CONFIG",
+    config.wranglerConfig,
+    undefined
+  );
+
+  if (isDebug)
+    log.info(`Resolved wranglerConfig: ${wranglerConfig || "default"}`);
+
+  const wranglerDataDir = resolveConfigValue(
+    undefined,
+    "D1_PRISMA_WRANGLER_DATA_DIR",
+    config.wranglerDataDir,
+    undefined
+  );
+
+  if (isDebug)
+    log.info(`Resolved wranglerDataDir: ${wranglerDataDir || "default"}`);
+
   const databases = await getD1Databases(wranglerConfig);
+  if (isDebug)
+    log.info(`Found ${databases.length} databases in wrangler config`);
+
   if (databases.length === 0) {
     log.error("No D1 databases configured in wrangler.");
     process.exit(1);
@@ -43,9 +102,11 @@ async function main() {
 
   const nonInteractive =
     args["non-interactive"] || args.nonInteractive || false;
+
   const selectedDb =
     args.d ||
     args.database ||
+    config.database ||
     (nonInteractive
       ? (log.error("--database flag required in non-interactive mode"),
         process.exit(1))
@@ -59,7 +120,11 @@ async function main() {
   if (command === "create") {
     await handleCreate(selectedDb as string, nonInteractive as boolean);
   } else if (command === "apply") {
-    await handleApply(selectedDb as string, nonInteractive as boolean);
+    await handleApply(
+      selectedDb as string,
+      nonInteractive as boolean,
+      wranglerDataDir
+    );
   } else if (command === "status") {
     await handleStatus(selectedDb as string, nonInteractive as boolean);
   } else {
@@ -80,49 +145,52 @@ async function main() {
     log.info("  --local                   Apply to local D1");
     log.info("  --remote                  Apply to remote D1");
     log.info("  --non-interactive         Skip prompts (CI/CD)");
+    log.info("  --log <level>             Log level (info, debug)");
     process.exit(0);
   }
 }
 
 async function handleCreate(db: string, nonInteractive: boolean) {
-  const schemaPath = args.schema || "./prisma/schema.prisma";
+  const config = await getD1PrismaConfig();
+  const logLevel = args.log || "info";
+  const isDebug = logLevel === "debug";
+  const schemaPath = args.schema || config.schema || "./prisma/schema.prisma";
   const migrationsDirOverride =
-    args["migrations-dir"] || args.migrationsDir;
+    args["migrations-dir"] || args.migrationsDir || config.migrationsDir;
   const baseline = args.baseline || false;
   const dryRun = args["dry-run"] || args.dryRun || false;
-  const verbose = args.verbose || false;
+  const verbose = args.verbose || isDebug || false;
 
   const s = spinner();
 
   try {
     s.start("Validating Prisma schema...");
+    if (isDebug) log.info(`Using schema at: ${schemaPath}`);
     try {
       await asyncExecSimple(`prisma validate --schema ${schemaPath}`);
     } catch (e) {
       s.stop("Schema validation failed.");
-      log.error(
-        e instanceof Error ? e.message : "Unknown validation error"
-      );
+      log.error(e instanceof Error ? e.message : "Unknown validation error");
       process.exit(1);
     }
 
     s.message("Reading Prisma config...");
     const prismaConfigPath = await getPrismaConfigPath();
-    if (!prismaConfigPath) {
-      s.stop("prisma.config.ts not found.");
-      log.error(
-        "Create a prisma.config.ts file in your project root. See docs for examples."
-      );
-      process.exit(1);
-    }
+    if (isDebug)
+      log.info(`Prisma config path: ${prismaConfigPath || "not found"}`);
 
     const migrationsDir = migrationsDirOverride
       ? (migrationsDirOverride as string)
-      : await getMigrationsDirFromConfig(prismaConfigPath);
+      : prismaConfigPath
+        ? await getMigrationsDirFromConfig(prismaConfigPath)
+        : "./prisma/migrations";
+
+    if (isDebug) log.info(`Migrations directory: ${migrationsDir}`);
 
     await ensureMigrationsDir(migrationsDir);
 
     const initial = await isInitialMigration(migrationsDir);
+    if (isDebug) log.info(`Is initial migration: ${initial}`);
     const pendingMigrations = await getPendingMigrations(
       migrationsDir,
       getStateFilePath(migrationsDir)
@@ -133,9 +201,7 @@ async function handleCreate(db: string, nonInteractive: boolean) {
       log.warn(
         `You have ${pendingMigrations.length} pending migration(s) that should be applied first.`
       );
-      log.info(
-        `Run: d1-prisma apply --database ${db} --local`
-      );
+      log.info(`Run: d1-prisma apply --database ${db} --local`);
 
       if (!nonInteractive) {
         const proceed = await confirm({
@@ -162,10 +228,7 @@ async function handleCreate(db: string, nonInteractive: boolean) {
     if (isCancel(name)) return;
 
     const version = await getNextVersion(migrationsDir);
-    const migrationFile = path.join(
-      migrationsDir,
-      `${version}_${name}.sql`
-    );
+    const migrationFile = path.join(migrationsDir, `${version}_${name}.sql`);
 
     s.message("Generating SQL diff...");
 
@@ -175,21 +238,21 @@ async function handleCreate(db: string, nonInteractive: boolean) {
     if (initial || baseline) {
       diffCommand = `prisma migrate diff --from-empty --to-schema ${schemaPath} --script`;
     } else {
-      const localDbPath = await findLocalD1DatabaseByName(db);
-      if (!localDbPath) {
-        s.stop("No local D1 database found.");
-        log.error(
-          `Could not find local D1 database for "${db}". ` +
-            `Run \`wrangler d1 migrations apply ${db} --local\` first to create the local database.`
-        );
-        process.exit(1);
-      }
+      // const localDbPath = await findLocalD1DatabaseByName(db, wranglerDataDir);
+      // if (!localDbPath) {
+      //   s.stop("No local D1 database found.");
+      //   log.error(
+      //     `Could not find local D1 database for "${db}". ` +
+      //       `Run \`wrangler d1 migrations apply ${db} --local\` first to create the local database.`
+      //   );
+      //   process.exit(1);
+      // }
 
       diffCommand = `prisma migrate diff --from-config-datasource --to-schema ${schemaPath} --script`;
-      diffEnv = { DATABASE_URL: `file:${localDbPath}` };
+      // diffEnv = { DATABASE_URL: `file:${localDbPath}` };
 
       if (verbose) {
-        log.info(`Local D1 database: ${localDbPath}`);
+        log.info(`Local D1 database: ${"localDbPath"}`);
       }
     }
 
@@ -244,7 +307,13 @@ async function handleCreate(db: string, nonInteractive: boolean) {
   }
 }
 
-async function handleApply(db: string, nonInteractive: boolean) {
+async function handleApply(
+  db: string,
+  nonInteractive: boolean,
+  wranglerDataDir?: string
+) {
+  const logLevel = args.log || "info";
+  const isDebug = logLevel === "debug";
   const local = args.local !== false;
   const remote = args.remote || false;
   const location = remote ? "--remote" : "--local";
@@ -253,10 +322,13 @@ async function handleApply(db: string, nonInteractive: boolean) {
 
   try {
     s.start(`Applying migrations ${location}...`);
+    let applyCmd = `wrangler d1 migrations apply ${db} ${location}`;
+    if (local && !remote && wranglerDataDir) {
+      applyCmd += ` --persist-to ${wranglerDataDir}`;
+    }
+    if (isDebug) log.info(`Running command: ${applyCmd}`);
     try {
-      await asyncExecSimple(
-        `wrangler d1 migrations apply ${db} ${location}`
-      );
+      await asyncExecSimple(applyCmd);
     } catch (e) {
       s.stop("Failed to apply migrations.");
       log.error(
@@ -267,19 +339,28 @@ async function handleApply(db: string, nonInteractive: boolean) {
 
     s.message("Updating local migration state...");
     const prismaConfigPath = await getPrismaConfigPath();
-    if (prismaConfigPath) {
-      const migrationsDir = await getMigrationsDirFromConfig(
-        prismaConfigPath
+    if (isDebug)
+      log.info(
+        `Prisma config path for state update: ${prismaConfigPath || "not found"}`
       );
-      const stateFile = getStateFilePath(migrationsDir);
-      const migrationFiles = await getMigrationFiles(migrationsDir);
 
-      for (const file of migrationFiles) {
-        const match = file.match(/^(\d{4})_(.+)\.sql$/);
-        if (match) {
-          const [, version, name] = match;
-          await markMigrationApplied(stateFile, version!, name!);
-        }
+    const migrationsDir = prismaConfigPath
+      ? await getMigrationsDirFromConfig(prismaConfigPath)
+      : "./prisma/migrations";
+
+    if (isDebug) log.info(`Migrations dir for state update: ${migrationsDir}`);
+    const stateFile = getStateFilePath(migrationsDir);
+    const migrationFiles = await getMigrationFiles(migrationsDir);
+    if (isDebug)
+      log.info(
+        `Found ${migrationFiles.length} migration files to mark as applied`
+      );
+
+    for (const file of migrationFiles) {
+      const match = file.match(/^(\d{4})_(.+)\.sql$/);
+      if (match) {
+        const [, version, name] = match;
+        await markMigrationApplied(stateFile, version!, name!);
       }
     }
 
@@ -306,23 +387,15 @@ async function handleStatus(db: string, nonInteractive: boolean) {
     s.start("Reading migration status...");
 
     const prismaConfigPath = await getPrismaConfigPath();
-    if (!prismaConfigPath) {
-      s.stop("prisma.config.ts not found.");
-      log.error("Create a prisma.config.ts file in your project root.");
-      process.exit(1);
-    }
+    const migrationsDir = prismaConfigPath
+      ? await getMigrationsDirFromConfig(prismaConfigPath)
+      : "./prisma/migrations";
 
-    const migrationsDir = await getMigrationsDirFromConfig(
-      prismaConfigPath
-    );
     const stateFile = getStateFilePath(migrationsDir);
 
     const allMigrations = await getMigrationFiles(migrationsDir);
-    const appliedState = await getAppliedMigrations(stateFile);
     const pending = await getPendingMigrations(migrationsDir, stateFile);
-    const applied = allMigrations.filter(
-      (f) => !pending.includes(f)
-    );
+    const applied = allMigrations.filter((f) => !pending.includes(f));
 
     s.stop("Migration status:");
 

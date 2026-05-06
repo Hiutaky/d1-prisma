@@ -1,4 +1,4 @@
 {
   "name": "test-worker",
-  "main": "src/index.ts"
+  "main": "src/index.ts",
 }

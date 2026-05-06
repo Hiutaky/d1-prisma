@@ -120,7 +120,10 @@ describe("markMigrationApplied", () => {
   test("appends to existing applied list", async () => {
     await fs.writeFile(
       stateFile,
-      JSON.stringify({ applied: ["0001_init"], lastSync: "2024-01-01T00:00:00.000Z" })
+      JSON.stringify({
+        applied: ["0001_init"],
+        lastSync: "2024-01-01T00:00:00.000Z",
+      })
     );
     await markMigrationApplied(stateFile, "0002", "add-users");
     const state = await getAppliedMigrations(stateFile);
@@ -184,20 +187,14 @@ describe("getPendingMigrations", () => {
   test("returns only unapplied migrations", async () => {
     await fs.writeFile(path.join(tempDir, "0001_init.sql"), "");
     await fs.writeFile(path.join(tempDir, "0002_add-users.sql"), "");
-    await fs.writeFile(
-      stateFile,
-      JSON.stringify({ applied: ["0001_init"] })
-    );
+    await fs.writeFile(stateFile, JSON.stringify({ applied: ["0001_init"] }));
     const pending = await getPendingMigrations(tempDir, stateFile);
     expect(pending).toEqual(["0002_add-users.sql"]);
   });
 
   test("returns empty array when all migrations applied", async () => {
     await fs.writeFile(path.join(tempDir, "0001_init.sql"), "");
-    await fs.writeFile(
-      stateFile,
-      JSON.stringify({ applied: ["0001_init"] })
-    );
+    await fs.writeFile(stateFile, JSON.stringify({ applied: ["0001_init"] }));
     const pending = await getPendingMigrations(tempDir, stateFile);
     expect(pending).toEqual([]);
   });
@@ -292,12 +289,16 @@ describe("ensureMigrationsDir", () => {
 describe("getStateFilePath", () => {
   test("returns correct path with state filename", () => {
     const result = getStateFilePath("/path/to/migrations");
-    expect(result).toBe(path.join("/path/to/migrations", ".d1-prisma-state.json"));
+    expect(result).toBe(
+      path.join("/path/to/migrations", ".d1-prisma-state.json")
+    );
   });
 
   test("works with relative paths", () => {
     const result = getStateFilePath("prisma/migrations");
-    expect(result).toBe(path.join("prisma/migrations", ".d1-prisma-state.json"));
+    expect(result).toBe(
+      path.join("prisma/migrations", ".d1-prisma-state.json")
+    );
   });
 });
 

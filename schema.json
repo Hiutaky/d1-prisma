@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "D1 Prisma Config",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path to the JSON schema for this file"
+    },
+    "wranglerConfig": {
+      "type": "string",
+      "description": "Path to the wrangler configuration file (e.g. wrangler.toml, wrangler.jsonc)"
+    },
+    "database": {
+      "type": "string",
+      "description": "The name of the D1 database to use"
+    },
+    "schema": {
+      "type": "string",
+      "description": "Path to the Prisma schema file"
+    },
+    "migrationsDir": {
+      "type": "string",
+      "description": "Path to the directory containing migrations"
+    },
+    "wranglerDataDir": {
+      "type": "string",
+      "description": "Path to the .wrangler directory for local development"
+    }
+  },
+  "additionalProperties": false
+}
